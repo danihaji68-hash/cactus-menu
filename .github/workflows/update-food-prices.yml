@@ -1,0 +1,61 @@
+name: Update food menu prices
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update-prices:
+    if: "!contains(github.event.head_commit.message, 'Update food menu prices')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pip install pillow
+      - name: Update only the two food prices
+        run: |
+          python - <<'PY'
+          import re, base64
+          from pathlib import Path
+          from io import BytesIO
+          from PIL import Image, ImageDraw, ImageFont
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          matches = list(re.finditer(r'(data:image/jpeg;base64,)([A-Za-z0-9+/=]+)', s))
+          if len(matches) < 2:
+              raise SystemExit('Food menu image was not found safely.')
+
+          m = matches[1]
+          raw = base64.b64decode(m.group(2))
+          im = Image.open(BytesIO(raw)).convert('RGB')
+          if im.size != (1025, 1536):
+              raise SystemExit(f'Unexpected food image size: {im.size}')
+
+          draw = ImageDraw.Draw(im)
+          font = ImageFont.truetype('/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf', 26)
+          # Original price locations: 50 at y~612, 80 at y~650.
+          # Clear only the two number areas; the rest of the menu is untouched.
+          draw.rectangle((62, 607, 112, 633), fill='white')
+          draw.rectangle((62, 645, 112, 671), fill='white')
+          draw.text((68, 603), '60', font=font, fill='black')
+          draw.text((68, 641), '90', font=font, fill='black')
+
+          out = BytesIO()
+          im.save(out, format='JPEG', quality=100, subsampling=0)
+          newb64 = base64.b64encode(out.getvalue()).decode('ascii')
+          s2 = s[:m.start(2)] + newb64 + s[m.end(2):]
+          p.write_text(s2, encoding='utf-8')
+          PY
+      - name: Commit price-only change
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Update food menu prices: 60 and 90'
+          git push
