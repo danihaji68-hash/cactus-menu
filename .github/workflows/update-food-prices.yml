@@ -20,7 +20,7 @@ jobs:
       - name: Update only the two food prices
         run: |
           python - <<'PY'
-          import re, base64
+          import re, base64, subprocess
           from pathlib import Path
           from io import BytesIO
           from PIL import Image, ImageDraw, ImageFont
@@ -37,8 +37,9 @@ jobs:
           if im.size != (1025, 1536):
               raise SystemExit(f'Unexpected food image size: {im.size}')
 
+          font_path = subprocess.check_output(['fc-match', '-f', '%{file}', 'Noto Sans:style=Bold'], text=True).strip()
+          font = ImageFont.truetype(font_path, 26)
           draw = ImageDraw.Draw(im)
-          font = ImageFont.truetype('/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf', 26)
           # Original price locations: 50 at y~612, 80 at y~650.
           # Clear only the two number areas; the rest of the menu is untouched.
           draw.rectangle((62, 607, 112, 633), fill='white')
